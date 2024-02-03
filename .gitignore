@@ -1,0 +1,25 @@
+HiddenStart.vbs
+subscriptions.json
+
+# Node.js
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Optional
+*.conf
+
+# Environment
+.env
+
+# IDE - WebStorm
+.idea/
+
+# Folder config file
+Desktop.ini
+
+# Windows shortcuts
+*.lnk
