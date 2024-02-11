@@ -1,12 +1,12 @@
 import dotenv from 'dotenv';
-
-dotenv.config();
-
 import TelegramBot from 'node-telegram-bot-api';
 import cron from 'node-cron';
 import axios from 'axios';
 import {ChartJSNodeCanvas} from 'chartjs-node-canvas';
 import {ChatGPTAPI} from 'chatgpt';
+import fs from 'fs';
+
+dotenv.config();
 
 
 async function getVerbalForecast(forecast, suburb, time) {
@@ -60,8 +60,8 @@ const defaultColors = {
 };
 
 const defaultChartSize = {
-    width: 1600,
-    height: 900,
+    width: 1920,
+    height: 1080,
 };
 
 // Initialize Telegram Bot
@@ -92,7 +92,11 @@ async function fetchWeatherData(latitude, longitude, timezone, forecastDays, for
 }
 
 // Function to generate a chart using Chart.js
-async function generateChart(type, labels, data, label, lineColor) {
+async function generateChart(type, labels, data, label, lineColor, maxAxisValue) {
+    let adjustedMaxValue;
+    if (maxAxisValue){
+        adjustedMaxValue = Math.min(maxAxisValue, Math.max(...data, maxAxisValue));
+    }
     const configuration = {
         type: type,
         data: {
@@ -104,12 +108,15 @@ async function generateChart(type, labels, data, label, lineColor) {
         options: {
             scales: {
                 x: getAxisOptions(defaultColors.tickColor, defaultColors.gridColor),
-                y: getAxisOptions(defaultColors.tickColor, defaultColors.gridColor),
+                y: getAxisOptions(defaultColors.tickColor, defaultColors.gridColor, adjustedMaxValue ),
             },
             plugins: {
                 legend: {
                     labels: {
                         color: defaultColors.gridColor,
+                        font: {
+                            size: 20
+                        }
                     },
                 },
             },
@@ -127,7 +134,7 @@ function getDataset(label, data, lineColor) {
         fill: false,
         backgroundColor: lineColor,
         borderColor: lineColor,
-        borderWidth: 2,
+        borderWidth: 3,
         tension: 0.5
     };
 }
@@ -155,6 +162,9 @@ async function generateCombinedChart(timeLabels, precipitationData, label) {
                 legend: {
                     labels: {
                         color: defaultColors.gridColor,
+                        font: {
+                            size: 20,
+                        }
                     },
                 },
             },
@@ -165,14 +175,20 @@ async function generateCombinedChart(timeLabels, precipitationData, label) {
 }
 
 // Function to get axis options for the chart
-function getAxisOptions(tickColor, gridColor) {
+function getAxisOptions(tickColor, gridColor, adjustedMaxValue ) {
     return {
         ticks: {
             color: tickColor,
+            borderWidth: 3,
+            font: {
+                size: 20
+            }
         },
         grid: {
             color: gridColor,
-        }
+            borderWidth: 3,
+        },
+        max: adjustedMaxValue,
     };
 }
 
@@ -210,9 +226,9 @@ async function fetchAndGenerateData(latitude, longitude, timezone, forecastDays,
         };
 
         const temperatureChart = await generateChart('line', timeLabels, weatherData.hourly.temperature_2m, 'Temperatur (°C)', defaultColors.lineColors[0]);
-        const precipitationProbabilityChart = await generateChart('line', timeLabels, weatherData.hourly.precipitation_probability, 'Niederschlagswahrscheinlichkeit (%)', defaultColors.lineColors[0]);
+        const precipitationProbabilityChart = await generateChart('line', timeLabels, weatherData.hourly.precipitation_probability, 'Niederschlagswahrscheinlichkeit (%)', defaultColors.lineColors[0], 100);
         const precipitationChart = await generateCombinedChart(timeLabels, precipitationData, 'Niederschlag', defaultColors.lineColors[0]);
-        const cloudCoverChart = await generateChart('line', timeLabels, weatherData.hourly.cloud_cover, 'Bewölkung (%)', defaultColors.lineColors[0]);
+        const cloudCoverChart = await generateChart('line', timeLabels, weatherData.hourly.cloud_cover, 'Bewölkung (%)', defaultColors.lineColors[0], 100);
         const windSpeedChart = await generateChart('line', timeLabels, weatherData.hourly.wind_speed_10m, 'Windgeschwindigkeit (km/h)', defaultColors.lineColors[0]);
 
         const verbalForecastPromise = getVerbalForecast(JSON.stringify(weatherData), suburb, new Date());
@@ -241,8 +257,6 @@ async function fetchLocationInfo(latitude, longitude) {
         return handleRequestError(error, 'Error fetching location data:');
     }
 }
-
-import fs from 'fs';
 
 // JSON file to store subscribed chat IDs and message thread IDs
 const subscriptionFile = 'subscriptions.json';
