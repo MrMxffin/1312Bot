@@ -186,7 +186,7 @@ function getAxisOptions(tickColor, gridColor, adjustedMaxValue ) {
         },
         grid: {
             color: gridColor,
-            borderWidth: 3,
+            lineWidth: 3,
         },
         max: adjustedMaxValue,
     };
