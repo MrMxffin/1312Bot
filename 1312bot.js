@@ -84,19 +84,28 @@ function handleRequestError(error, errorMessage) {
 // Function to fetch weather data from OpenWeatherMap API
 async function fetchWeatherData(latitude, longitude, timezone, forecastDays, forecastHours, hourlyParams) {
     try {
-        const response = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=${hourlyParams.join(',')}&timezone=${timezone}&forecast_days=${forecastDays}&forecast_hours=${forecastHours}`);
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=${hourlyParams.join(',')}&timezone=${timezone}&forecast_days=${forecastDays}&forecast_hours=${forecastHours}`
+        console.log(`Trying to fetch data from ${url}`)
+        const response = await axios.get(url);
         return response.data;
     } catch (error) {
         return handleRequestError(error, 'Error fetching weather data:');
     }
 }
 
-// Function to generate a chart using Chart.js
-async function generateChart(type, labels, data, label, lineColor, maxAxisValue) {
-    let adjustedMaxValue;
-    if (maxAxisValue){
-        adjustedMaxValue = Math.min(maxAxisValue, Math.max(...data, maxAxisValue));
+function getAdjustedBounds(data, bounds) {
+    console.log(JSON.stringify(data))
+    console.log(JSON.stringify(bounds))
+    if (Math.max(...data) === Math.min(...data)) {
+        return bounds
+    } else {
+        return {}
     }
+}
+
+// Function to generate a chart using Chart.js
+async function generateChart(type, labels, data, label, lineColor, bounds) {
+    const adjustedBounds = getAdjustedBounds(data, bounds)
     const configuration = {
         type: type,
         data: {
@@ -108,7 +117,7 @@ async function generateChart(type, labels, data, label, lineColor, maxAxisValue)
         options: {
             scales: {
                 x: getAxisOptions(defaultColors.tickColor, defaultColors.gridColor),
-                y: getAxisOptions(defaultColors.tickColor, defaultColors.gridColor, adjustedMaxValue ),
+                y: getAxisOptions(defaultColors.tickColor, defaultColors.gridColor, adjustedBounds),
             },
             plugins: {
                 legend: {
@@ -140,9 +149,13 @@ function getDataset(label, data, lineColor) {
 }
 
 // Function to generate combined chart with multiple datasets
-async function generateCombinedChart(timeLabels, precipitationData, label) {
-    const {rain, showers, snow} = precipitationData;
-
+async function generateCombinedChart(timeLabels, precipitationData, label, bounds) {
+    const {rain, showers, snowfall} = precipitationData;
+    let data = []
+    for (const precipitationType of [rain, showers, snowfall]) {
+        data = data.concat(...precipitationType.data);
+    }
+    const adjustedBounds = getAdjustedBounds(data, bounds)
     const configuration = {
         type: 'line',
         data: {
@@ -150,13 +163,13 @@ async function generateCombinedChart(timeLabels, precipitationData, label) {
             datasets: [
                 getDataset(label + `[Regen] (${rain.unit})`, rain.data, defaultColors.lineColors[0]),
                 getDataset(label + `[Schauer] (${showers.unit})`, showers.data, defaultColors.lineColors[1]),
-                getDataset(label + `[Schnee] (${snow.unit})`, snow.data, defaultColors.lineColors[2]),
+                getDataset(label + `[Schnee] (${snowfall.unit})`, snowfall.data, defaultColors.lineColors[2]),
             ],
         },
         options: {
             scales: {
                 x: getAxisOptions(defaultColors.tickColor, defaultColors.gridColor),
-                y: getAxisOptions(defaultColors.tickColor, defaultColors.gridColor),
+                y: getAxisOptions(defaultColors.tickColor, defaultColors.gridColor, adjustedBounds),
             },
             plugins: {
                 legend: {
@@ -175,7 +188,11 @@ async function generateCombinedChart(timeLabels, precipitationData, label) {
 }
 
 // Function to get axis options for the chart
-function getAxisOptions(tickColor, gridColor, adjustedMaxValue ) {
+function getAxisOptions(tickColor, gridColor, adjustedBounds) {
+    if (adjustedBounds) {
+        console.log("max:", adjustedBounds && adjustedBounds.maxAxisValue)
+        console.log("min:", adjustedBounds && adjustedBounds.minAxisValue, "\n")
+    }
     return {
         ticks: {
             color: tickColor,
@@ -188,7 +205,8 @@ function getAxisOptions(tickColor, gridColor, adjustedMaxValue ) {
             color: gridColor,
             lineWidth: 3,
         },
-        max: adjustedMaxValue,
+        max: adjustedBounds && adjustedBounds.maxAxisValue,
+        min: adjustedBounds && adjustedBounds.minAxisValue,
     };
 }
 
@@ -219,17 +237,23 @@ async function fetchAndGenerateData(latitude, longitude, timezone, forecastDays,
                 unit: weatherData.hourly_units.showers,
                 data: weatherData.hourly.showers,
             },
-            snow: {
-                unit: weatherData.hourly_units.showers,
-                data: weatherData.hourly.snow,
+            snowfall: {
+                unit: weatherData.hourly_units.snowfall,
+                data: weatherData.hourly.snowfall,
             },
         };
 
         const temperatureChart = await generateChart('line', timeLabels, weatherData.hourly.temperature_2m, 'Temperatur (°C)', defaultColors.lineColors[0]);
-        const precipitationProbabilityChart = await generateChart('line', timeLabels, weatherData.hourly.precipitation_probability, 'Niederschlagswahrscheinlichkeit (%)', defaultColors.lineColors[0], 100);
-        const precipitationChart = await generateCombinedChart(timeLabels, precipitationData, 'Niederschlag', defaultColors.lineColors[0]);
-        const cloudCoverChart = await generateChart('line', timeLabels, weatherData.hourly.cloud_cover, 'Bewölkung (%)', defaultColors.lineColors[0], 100);
-        const windSpeedChart = await generateChart('line', timeLabels, weatherData.hourly.wind_speed_10m, 'Windgeschwindigkeit (km/h)', defaultColors.lineColors[0]);
+        const precipitationChart = await generateCombinedChart(timeLabels, precipitationData, 'Niederschlag', {minAxisValue: 0});
+        const windSpeedChart = await generateChart('line', timeLabels, weatherData.hourly.wind_speed_10m, 'Windgeschwindigkeit (km/h)', defaultColors.lineColors[0], {minAxisValue: 0});
+        const cloudCoverChart = await generateChart('line', timeLabels, weatherData.hourly.cloud_cover, 'Bewölkung (%)', defaultColors.lineColors[0], {
+            maxAxisValue: 100,
+            minAxisValue: 0
+        });
+        const precipitationProbabilityChart = await generateChart('line', timeLabels, weatherData.hourly.precipitation_probability, 'Niederschlagswahrscheinlichkeit (%)', defaultColors.lineColors[0], {
+            maxAxisValue: 100,
+            minAxisValue: 0
+        });
 
         const verbalForecastPromise = getVerbalForecast(JSON.stringify(weatherData), suburb, new Date());
 
@@ -276,83 +300,103 @@ function saveSubscriptions(subscriptions) {
     fs.writeFileSync(subscriptionFile, JSON.stringify(subscriptions, null, 2), 'utf-8');
 }
 
+// Function to check if a chat ID is already subscribed
+function isSubscribed(chatId) {
+    return subscriptions.includes(chatId);
+}
+
 // Load existing subscriptions
 let subscriptions = loadSubscriptions();
 
-// Update the '/subscribe' and '/unsubscribe' commands
-bot.onText(/\/subscribe/, (msg) => {
+// Command to handle subscription and unsubscription
+function handleSubscriptionCommand(msg, subscribe) {
     const chatId = msg.chat.id;
 
-    // Check if already subscribed
-    if (!subscriptions.includes(chatId)) {
+    if (subscribe && !isSubscribed(chatId)) {
         subscriptions.push(chatId);
         saveSubscriptions(subscriptions);
         bot.sendMessage(chatId, 'You have subscribed to weather updates.', {message_thread_id: msg.message_thread_id});
-    } else {
-        bot.sendMessage(chatId, 'You are already subscribed.', {message_thread_id: msg.message_thread_id});
-    }
-});
-
-bot.onText(/\/unsubscribe/, (msg) => {
-    const chatId = msg.chat.id;
-
-    // Check if subscribed and remove
-    if (subscriptions.includes(chatId)) {
+    } else if (!subscribe && isSubscribed(chatId)) {
         subscriptions = subscriptions.filter((id) => id !== chatId);
         saveSubscriptions(subscriptions);
         bot.sendMessage(chatId, 'You have unsubscribed from weather updates.', {message_thread_id: msg.message_thread_id});
     } else {
-        bot.sendMessage(chatId, 'You are not currently subscribed.', {message_thread_id: msg.message_thread_id});
+        const message = subscribe ? 'You are already subscribed.' : 'You are not currently subscribed.';
+        bot.sendMessage(chatId, message, {message_thread_id: msg.message_thread_id});
     }
+}
+
+// Command to handle /subscribe
+bot.onText(/\/subscribe/, (msg) => {
+    handleSubscriptionCommand(msg, true);
 });
+
+// Command to handle /unsubscribe
+bot.onText(/\/unsubscribe/, (msg) => {
+    handleSubscriptionCommand(msg, false);
+});
+
 // Modify the schedule to check if the chat is subscribed before sending updates
 cron.schedule('12 13 * * *', async () => {
-    if (subscriptions.length > 0) {
-        try {
-            const suburb = await fetchLocationInfo(defaultConfig.latitude, defaultConfig.longitude);
-            const config = { ...defaultConfig, suburb };
+    if (subscriptions.length === 0) return
+    try {
+        const {media, verbalForecast} = await fetchAndGenerateWeatherData();
 
-            // Fetch data and generate charts and forecast
-            const {
-                temperatureChart,
-                precipitationProbabilityChart,
-                precipitationChart,
-                cloudCoverChart,
-                windSpeedChart,
-                verbalForecast,
-            } = await fetchAndGenerateData(
-                config.latitude,
-                config.longitude,
-                config.timezone,
-                config.forecast_days,
-                config.forecast_hours,
-                config.hourlyParams,
-                suburb
-            );
+        // Iterate through subscribed chat IDs and send updates with stored charts and forecast
+        for (const subscribedChatId of subscriptions) {
 
-            // Create an array of media objects
-            const media = [
-                { type: 'photo', media: temperatureChart, caption: 'Temperaturvorhersage' },
-                { type: 'photo', media: precipitationChart, caption: 'Niederschlagsvorhersage' },
-                { type: 'photo', media: windSpeedChart, caption: 'Windgeschwindigkeit Vorhersage' },
-                { type: 'photo', media: cloudCoverChart, caption: 'Bewölkung Vorhersage' },
-                { type: 'photo', media: precipitationProbabilityChart, caption: 'Niederschlagswahrscheinlichkeit Vorhersage' },
-            ];
+            // Send the media group first
+            await bot.sendMediaGroup(subscribedChatId, media);
 
-            // Iterate through subscribed chat IDs and send updates with stored charts and forecast
-            for (const subscribedChatId of subscriptions) {
-
-                // Send the media group first
-                await bot.sendMediaGroup(subscribedChatId, media);
-
-                // Finally, send the verbal forecast
-                await bot.sendMessage(subscribedChatId, verbalForecast, { parse_mode: 'Markdown', disable_web_page_preview: true });
-            }
-        } catch (error) {
-            console.error('Error fetching and sending data:', error.message);
+            // Finally, send the verbal forecast
+            await bot.sendMessage(subscribedChatId, verbalForecast, {
+                parse_mode: 'Markdown',
+                disable_web_page_preview: true
+            });
         }
+    } catch (error) {
+        console.error('Error fetching and sending data:', error.message);
     }
 });
+
+// Function to fetch location information and generate weather data
+async function fetchAndGenerateWeatherData() {
+    const suburb = await fetchLocationInfo(defaultConfig.latitude, defaultConfig.longitude);
+    const config = {...defaultConfig, suburb};
+
+    // Fetch data and generate charts and forecast
+    const {
+        temperatureChart,
+        precipitationProbabilityChart,
+        precipitationChart,
+        cloudCoverChart,
+        windSpeedChart,
+        verbalForecast,
+    } = await fetchAndGenerateData(
+        config.latitude,
+        config.longitude,
+        config.timezone,
+        config.forecast_days,
+        config.forecast_hours,
+        config.hourlyParams,
+        suburb
+    );
+
+    // Create an array of media objects
+    const media = [
+        {type: 'photo', media: temperatureChart, caption: 'Temperaturvorhersage'},
+        {type: 'photo', media: precipitationChart, caption: 'Niederschlagsvorhersage'},
+        {type: 'photo', media: windSpeedChart, caption: 'Windgeschwindigkeit Vorhersage'},
+        {type: 'photo', media: cloudCoverChart, caption: 'Bewölkung Vorhersage'},
+        {
+            type: 'photo',
+            media: precipitationProbabilityChart,
+            caption: 'Niederschlagswahrscheinlichkeit Vorhersage'
+        },
+    ];
+
+    return {media, verbalForecast};
+}
 
 // Command to get current weather information on demand
 bot.onText(/\/get_weather/, async (msg) => {
@@ -363,44 +407,20 @@ bot.onText(/\/get_weather/, async (msg) => {
     const messageThreadId = msg.message_thread_id;
 
     try {
-        const suburb = await fetchLocationInfo(defaultConfig.latitude, defaultConfig.longitude);
-        const config = { ...defaultConfig, suburb };
-
-        // Fetch data and generate charts and forecast
-        const {
-            temperatureChart,
-            precipitationProbabilityChart,
-            precipitationChart,
-            cloudCoverChart,
-            windSpeedChart,
-            verbalForecast,
-        } = await fetchAndGenerateData(
-            config.latitude,
-            config.longitude,
-            config.timezone,
-            config.forecast_days,
-            config.forecast_hours,
-            config.hourlyParams,
-            suburb
-        );
-
-        // Create an array of media objects
-        const media = [
-            { type: 'photo', media: temperatureChart, caption: 'Temperaturvorhersage' },
-            { type: 'photo', media: precipitationChart, caption: 'Niederschlagsvorhersage' },
-            { type: 'photo', media: windSpeedChart, caption: 'Windgeschwindigkeit Vorhersage' },
-            { type: 'photo', media: cloudCoverChart, caption: 'Bewölkung Vorhersage' },
-            { type: 'photo', media: precipitationProbabilityChart, caption: 'Niederschlagswahrscheinlichkeit Vorhersage' },
-        ];
+        const {media, verbalForecast} = await fetchAndGenerateWeatherData();
 
         // Send the media group
         await bot.sendMediaGroup(chatId, media);
 
         // Send the verbal forecast
-        await bot.sendMessage(chatId, verbalForecast, { parse_mode: 'Markdown', disable_web_page_preview: true, message_thread_id: messageThreadId });
+        await bot.sendMessage(chatId, verbalForecast, {
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+            message_thread_id: messageThreadId
+        });
     } catch (error) {
         console.error('Error fetching and sending data:', error.message);
-        bot.sendMessage(chatId, 'Unable to fetch weather data at the moment.', { message_thread_id: messageThreadId });
+        bot.sendMessage(chatId, 'Unable to fetch weather data at the moment.', {message_thread_id: messageThreadId});
     }
 });
 
@@ -414,5 +434,5 @@ bot.onText(/\/start/, async (msg) => {
         `/get_weather - Erhalte aktuelle Wetterinformationen auf Anfrage (nur für den Bot-Besitzer).\n\n` +
         `Du wirst automatisch jeden Tag um 13:12 Uhr Wetteraktualisierungen erhalten, wenn du abonniert bist.`;
 
-    bot.sendMessage(chatId, startMessage, { message_thread_id: messageThreadId });
+    bot.sendMessage(chatId, startMessage, {message_thread_id: messageThreadId});
 });
