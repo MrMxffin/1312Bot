@@ -39,7 +39,7 @@ OPENAI_API_KEY=your_openai_api_key
 Contributions are welcome! Please feel free to open an issue or submit a pull request.License
 ## License
 ### Code and Original Content
-Unless otherwise stated, all code and original content in this project are released under the [Unlicense](unlicense.org), read more about this in the [License file](LICENSE).
+Unless otherwise stated, all code and original content in this project are released under the [Unlicense](https://unlicense.org), read more about this in the [License file](LICENSE).
 
 ### External Data Sources
 This project utilizes data from external sources, including:
