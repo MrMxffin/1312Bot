@@ -39,7 +39,7 @@ const defaultConfig = {
     longitude: 12.3761,
     timezone: "Europe%2FBerlin",
     forecast_days: 1,
-    forecast_hours: 12,
+    forecast_hours: 24,
     hourlyParams: [
         'temperature_2m',
         'precipitation_probability',
@@ -300,10 +300,11 @@ function saveSubscriptions(subscriptions) {
     fs.writeFileSync(subscriptionFile, JSON.stringify(subscriptions, null, 2), 'utf-8');
 }
 
-// Function to check if a chat ID is already subscribed
-function isSubscribed(chatId) {
-    return subscriptions.includes(chatId);
+// Function to check if a chat ID and message thread ID are already subscribed
+function isSubscribed(chatId, messageThreadId) {
+    return subscriptions.some(sub => sub.chatId === chatId && sub.messageThreadId === messageThreadId);
 }
+
 
 // Load existing subscriptions
 let subscriptions = loadSubscriptions();
@@ -311,18 +312,19 @@ let subscriptions = loadSubscriptions();
 // Command to handle subscription and unsubscription
 function handleSubscriptionCommand(msg, subscribe) {
     const chatId = msg.chat.id;
+    const messageThreadId = msg.message_thread_id;
 
-    if (subscribe && !isSubscribed(chatId)) {
-        subscriptions.push(chatId);
+    if (subscribe && !isSubscribed(chatId,messageThreadId)) {
+        subscriptions.push({ chatId, messageThreadId });
         saveSubscriptions(subscriptions);
-        bot.sendMessage(chatId, 'You have subscribed to weather updates.', {message_thread_id: msg.message_thread_id});
-    } else if (!subscribe && isSubscribed(chatId)) {
-        subscriptions = subscriptions.filter((id) => id !== chatId);
+        bot.sendMessage(chatId, 'You have subscribed to weather updates.', { message_thread_id: messageThreadId });
+    } else if (!subscribe && isSubscribed(chatId, messageThreadId)) {
+        subscriptions = subscriptions.filter(sub => sub.chatId === chatId && sub.messageThreadId === messageThreadId);
         saveSubscriptions(subscriptions);
-        bot.sendMessage(chatId, 'You have unsubscribed from weather updates.', {message_thread_id: msg.message_thread_id});
+        bot.sendMessage(chatId, 'You have unsubscribed from weather updates.', { message_thread_id: messageThreadId });
     } else {
         const message = subscribe ? 'You are already subscribed.' : 'You are not currently subscribed.';
-        bot.sendMessage(chatId, message, {message_thread_id: msg.message_thread_id});
+        bot.sendMessage(chatId, message, { message_thread_id: messageThreadId });
     }
 }
 
@@ -338,26 +340,29 @@ bot.onText(/\/unsubscribe/, (msg) => {
 
 // Modify the schedule to check if the chat is subscribed before sending updates
 cron.schedule('12 13 * * *', async () => {
-    if (subscriptions.length === 0) return
+    if (subscriptions.length === 0) return;
     try {
-        const {media, verbalForecast} = await fetchAndGenerateWeatherData();
+        const { media, verbalForecast } = await fetchAndGenerateWeatherData();
 
-        // Iterate through subscribed chat IDs and send updates with stored charts and forecast
-        for (const subscribedChatId of subscriptions) {
+        // Iterate through subscribed chat IDs and message thread IDs and send updates with stored charts and forecast
+        for (const subscription of subscriptions) {
+            const { chatId, messageThreadId } = subscription;
 
             // Send the media group first
-            await bot.sendMediaGroup(subscribedChatId, media);
+            await bot.sendMediaGroup(chatId, media, {message_thread_id: messageThreadId});
 
             // Finally, send the verbal forecast
-            await bot.sendMessage(subscribedChatId, verbalForecast, {
+            await bot.sendMessage(chatId, verbalForecast, {
                 parse_mode: 'Markdown',
-                disable_web_page_preview: true
+                disable_web_page_preview: true,
+                message_thread_id: messageThreadId // Include the message thread ID
             });
         }
     } catch (error) {
         console.error('Error fetching and sending data:', error.message);
     }
 });
+
 
 // Function to fetch location information and generate weather data
 async function fetchAndGenerateWeatherData() {
@@ -410,7 +415,7 @@ bot.onText(/\/get_weather/, async (msg) => {
         const {media, verbalForecast} = await fetchAndGenerateWeatherData();
 
         // Send the media group
-        await bot.sendMediaGroup(chatId, media);
+        await bot.sendMediaGroup(chatId, media, {message_thread_id: messageThreadId});
 
         // Send the verbal forecast
         await bot.sendMessage(chatId, verbalForecast, {
