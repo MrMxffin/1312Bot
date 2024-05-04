@@ -144,7 +144,7 @@ function getDataset(label, data, lineColor) {
         backgroundColor: lineColor,
         borderColor: lineColor,
         borderWidth: 3,
-        tension: 0.5
+        cubicInterpolationMode: 'monotone',
     };
 }
 
