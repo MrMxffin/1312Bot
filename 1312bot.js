@@ -319,7 +319,7 @@ function handleSubscriptionCommand(msg, subscribe) {
         saveSubscriptions(subscriptions);
         bot.sendMessage(chatId, 'You have subscribed to weather updates.', { message_thread_id: messageThreadId });
     } else if (!subscribe && isSubscribed(chatId, messageThreadId)) {
-        subscriptions = subscriptions.filter(sub => sub.chatId === chatId && sub.messageThreadId === messageThreadId);
+        subscriptions = subscriptions.filter(sub => !(sub.chatId === chatId && sub.messageThreadId === messageThreadId));
         saveSubscriptions(subscriptions);
         bot.sendMessage(chatId, 'You have unsubscribed from weather updates.', { message_thread_id: messageThreadId });
     } else {
