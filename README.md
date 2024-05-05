@@ -21,6 +21,7 @@ Receive weather updates automatically every day at a specified time.
 ```env
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 OPENAI_API_KEY=your_openai_api_key
+OWNER_ID=your_telegram_chat_id
 ```
 4. Start the Bot: ```npm start```
 ## Usage 
