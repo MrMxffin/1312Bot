@@ -1,8 +1,8 @@
 {
   "type": "module",
-  "name": "1312bot",
-  "version": "1.0.0",
-  "description": "",
+  "name": "1312: Wetterbot",
+  "version": "0.2.5",
+  "description": "Ein Wetterbot, der zu einer bestimmten Zeit einen graphischen und verbalen Wetterbericht an abonnierte Kanäle sendet.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

@@ -1,5 +1,6 @@
-HiddenStart.vbs
-subscriptions.json
+data
+logs
++.log
 
 # Node.js
 node_modules/

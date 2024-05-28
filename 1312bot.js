@@ -283,7 +283,7 @@ async function fetchLocationInfo(latitude, longitude) {
 }
 
 // JSON file to store subscribed chat IDs and message thread IDs
-const subscriptionFile = 'subscriptions.json';
+const subscriptionFile = './data/subscriptions.json';
 
 // Function to load subscriptions from the JSON file
 function loadSubscriptions() {
